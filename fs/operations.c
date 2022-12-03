@@ -141,13 +141,20 @@ int tfs_sym_link(char const *target, char const *link_name) {
     PANIC("TODO: tfs_sym_link");
 }
 
-int tfs_link(char const *target, char const *link_name) {
-    (void)target;
-    (void)link_name;
-    // ^ this is a trick to keep the compiler from complaining about unused
-    // variables. TODO: remove
+/**
+ * Creates a hard-link from a new target_file to an existing source_file corresponding inumber.
+ *
+ * Input:
+ *  - target_file - To create target file name.
+ *  - source_file - Existing source file name.
+ */
 
-    PANIC("TODO: tfs_link");
+int tfs_link(char const *target_file, char const *source_file) {
+  // Check if both paths are valid
+  if (!valid_pathname(target_file) || !valid_pathname(source_file)) {
+        return -1;
+  }
+
 }
 
 int tfs_close(int fhandle) {
