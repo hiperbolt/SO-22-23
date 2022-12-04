@@ -154,6 +154,28 @@ int tfs_link(char const *target_file, char const *source_file) {
   if (!valid_pathname(target_file) || !valid_pathname(source_file)) {
         return -1;
   }
+  
+  // Make sure the root dir inode exists, and get it.
+  inode_t *root_dir_inode = inode_get(ROOT_DIR_INUM);
+  ALWAYS_ASSERT(root_dir_inode != NULL,
+                "tfs_open: root dir inode must exist");
+
+  // Get source_file inum.
+  int source_inum = tfs_lookup(source_file, root_dir_inode);
+
+  if(source_inum >= 0){
+    // We're going to create a new directory entry, in this directory, with the provided name and the source file inum
+    // TODO: deal with errors from add_dir_entry
+    add_dir_entry(root_dir_inode, target_file, source_inum) 
+    
+   
+  } else {
+    // If the file does not exist.
+    return -1;
+  }
+ 
+
+
 
 }
 
