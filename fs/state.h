@@ -17,18 +17,17 @@ typedef struct {
     int d_inumber;
 } dir_entry_t;
 
-typedef enum { T_FILE, T_DIRECTORY } inode_type;
+typedef enum { T_FILE, T_DIRECTORY , T_SYMLINK} inode_type;
 
 /**
  * Inode
  */
 typedef struct {
     inode_type i_node_type;
-
+    int i_hardlinks;
     size_t i_size;
     int i_data_block;
-
-    // in a more complete FS, more fields could exist here
+    char i_symlink[MAX_FILE_NAME];
 } inode_t;
 
 typedef enum { FREE = 0, TAKEN = 1 } allocation_state_t;

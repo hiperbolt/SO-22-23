@@ -132,13 +132,34 @@ int tfs_open(char const *name, tfs_file_mode_t mode) {
     // opened but it remains created
 }
 
-int tfs_sym_link(char const *target, char const *link_name) {
-    (void)target;
-    (void)link_name;
-    // ^ this is a trick to keep the compiler from complaining about unused
-    // variables. TODO: remove
+/**
+ * Creates a symbolic link from target to sourceq
+ * 
+ * 
+ * @param target 
+ * @param link_name 
+ * @return int 
+ */
+int tfs_sym_link(char const *target_file, char const *source_file) {
+    // Check if both paths are valid
+    if (!valid_pathname(target_file) || !valid_pathname(source_file)) {
+        return -1;
+    }
 
-    PANIC("TODO: tfs_sym_link");
+    // Make sure the root dir inode exists, and get it.
+    inode_t *root_dir_inode = inode_get(ROOT_DIR_INUM);
+    ALWAYS_ASSERT(root_dir_inode != NULL,
+                "tfs_open: root dir inode must exist");
+
+    // We're going to create a new inode for the symlink
+    int inum = inode_create(T_SYMLINK);
+    if (inum == -1) {
+        return -1; // no space in inode table
+    }
+
+    inode_t *inode = inode_get(inum);
+    strcpy(inode->i_symlink, target_file);
+
 }
 
 /**
@@ -162,13 +183,15 @@ int tfs_link(char const *target_file, char const *source_file) {
 
   // Get source_file inum.
   int source_inum = tfs_lookup(source_file, root_dir_inode);
+  // Get source file inode.
+  inode_t *source_inode = inode_get(source_inum);
 
   if(source_inum >= 0){
     // We're going to create a new directory entry, in this directory, with the provided name and the source file inum
     // TODO: deal with errors from add_dir_entry
-    add_dir_entry(root_dir_inode, target_file, source_inum) 
-    
-   
+    add_dir_entry(root_dir_inode, target_file, source_inum);
+    // We need to increment the source file's hard-link count.
+    source_inode->i_hardlinks++;
   } else {
     // If the file does not exist.
     return -1;
