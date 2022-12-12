@@ -263,11 +263,15 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
 }
 
 int tfs_unlink(char const *target) {
-    (void)target;
-    // ^ this is a trick to keep the compiler from complaining about unused
-    // variables. TODO: remove
+    // Check if path is valid
+    if (!valid_pathname(target)) {
+        return -1;
+    }
 
-    PANIC("TODO: tfs_unlink");
+    // First we need to determine if it's a hardlink, a symlink, or a file
+    
+    
+
 }
 
 int tfs_copy_from_external_fs(char const *source_path, char const *dest_path) {
