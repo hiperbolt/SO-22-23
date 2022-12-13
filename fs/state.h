@@ -21,13 +21,21 @@ typedef enum { T_FILE, T_DIRECTORY , T_SYMLINK} inode_type;
 
 /**
  * Inode
+ * 
+ * Defined this way to allow for symlinks to be efficiently stored on the inode itself.
+ * Inode size is 40 + inode_type enum bytes.
+ * 
  */
-typedef struct {
+typedef struct{
     inode_type i_node_type;
-    int i_hardlinks;
-    size_t i_size;
-    int i_data_block;
-    char i_symlink[MAX_FILE_NAME];
+    union {
+        struct {
+            int i_hardlinks;
+            size_t i_size;
+            int i_data_block;
+        };
+        char i_symlink[MAX_FILE_NAME];
+    };
 } inode_t;
 
 typedef enum { FREE = 0, TAKEN = 1 } allocation_state_t;

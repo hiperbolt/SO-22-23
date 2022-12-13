@@ -237,9 +237,8 @@ int inode_create(inode_type i_type) {
         inode_table[inumber].i_data_block = -1;
         break;
     case T_SYMLINK:
-        // In case of a new symlink, simply sets its size to 0
-        inode_table[inumber].i_size = 0;
-        inode_table[inumber].i_data_block = -1;
+        // In case of a new symlink, set i_symlink to NULL
+        strcpy(inode_table[inumber].i_symlink, NULL);
         break;
     default:
         PANIC("inode_create: unknown file type");
@@ -274,6 +273,8 @@ void inode_delete(int inumber) {
 
     ALWAYS_ASSERT(freeinode_ts[inumber] == TAKEN,
                   "inode_delete: inode already freed");
+
+    // If it is a symlink, we don't need to free the data block
 
     if (inode_table[inumber].i_size > 0) {
         data_block_free(inode_table[inumber].i_data_block);
@@ -413,6 +414,29 @@ int find_in_dir(inode_t const *inode, char const *sub_name) {
         }
 
     return -1; // entry not found
+}
+
+int check_empty_dir(inode_t const *inode) {
+    ALWAYS_ASSERT(inode != NULL, "check_empty_dir: inode must be non-NULL");
+
+    insert_delay(); // simulate storage access delay to inode with inumber
+    if (inode->i_node_type != T_DIRECTORY) {
+        return -1; // not a directory
+    }
+
+    // Locates the block containing the entries of the directory
+    dir_entry_t *dir_entry = (dir_entry_t *)data_block_get(inode->i_data_block);
+    ALWAYS_ASSERT(dir_entry != NULL,
+                  "check_empty_dir: directory inode must have a data block");
+
+    // Iterates over the directory entries looking for one that has the target
+    // name
+    for (int i = 0; i < MAX_DIR_ENTRIES; i++)
+        if (dir_entry[i].d_inumber != -1) {
+            return -1;
+        }
+
+    return 0;
 }
 
 /**

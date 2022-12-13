@@ -8,6 +8,8 @@
 
 #include "betterassert.h"
 
+
+
 tfs_params tfs_default_params() {
     tfs_params params = {
         .max_inode_count = 64,
@@ -133,7 +135,7 @@ int tfs_open(char const *name, tfs_file_mode_t mode) {
 }
 
 /**
- * Creates a symbolic link from target to sourceq
+ * Creates a symbolic link from target to source
  * 
  * 
  * @param target 
@@ -158,8 +160,14 @@ int tfs_sym_link(char const *target_file, char const *source_file) {
     }
 
     inode_t *inode = inode_get(inum);
-    strcpy(inode->i_symlink, target_file);
+    strcpy(inode->i_symlink, source_file);
 
+    // Add entry in the root directory
+    if (add_dir_entry(root_dir_inode, target_file, inum) == -1) {
+        inode_delete(inum);
+        return -1; // no space in directory
+    }
+    return 0;
 }
 
 /**
@@ -196,10 +204,6 @@ int tfs_link(char const *target_file, char const *source_file) {
     // If the file does not exist.
     return -1;
   }
- 
-
-
-
 }
 
 int tfs_close(int fhandle) {
@@ -291,10 +295,53 @@ int tfs_unlink(char const *target) {
         return -1;
     }
 
-    // First we need to determine if it's a hardlink, a symlink, or a file
-    
-    
+    // Get the root dir inode
+    inode_t *root_dir_inode = inode_get(ROOT_DIR_INUM);
+    ALWAYS_ASSERT(root_dir_inode != NULL,
+                "tfs_unlink: root dir inode must exist");
 
+    // Get the inode number of the file we want to delete
+    int inum = tfs_lookup(target, root_dir_inode);
+
+    // Get the inode
+    inode_t *target_inode = inode_get(inum);
+
+    // First we need to determine if it is a file (wether it be a directory or not) or if it is a symlink
+    switch (target_inode->i_node_type)
+    {
+    case T_FILE:
+        // If it is a file, we need to decrement the hard link count
+        target_inode->i_hardlinks--;
+        // If the hard link count is 0, we need to delete the file
+        if(target_inode->i_hardlinks == 0){
+            inode_delete(inum);
+            clear_dir_entry(root_dir_inode, target);
+        }
+        return 0;
+        break;
+
+    case T_DIRECTORY:
+        // If it is a directory, we need to check if it is empty. And if it is not the root directory
+        if(inum == ROOT_DIR_INUM){
+            return -1;
+        }
+        if(check_empty_dir(inum)){
+            // If it is empty, we can delete it
+            inode_delete(inum);
+            clear_dir_entry(root_dir_inode, target);
+            return 0;
+        }
+        break;
+
+    case T_SYMLINK:
+        // If it is a symlink, we can delete it
+        inode_delete(inum);
+        clear_dir_entry(root_dir_inode, target);
+        break;
+    default:
+        PANIC("tfs_unlink: invalid inode type");
+        return -1;
+    }
 }
 
 int tfs_copy_from_external_fs(char const *source_path, char const *dest_path) {
