@@ -16,6 +16,8 @@ typedef struct {
     char d_name[MAX_FILE_NAME];
     int d_inumber;
 } dir_entry_t;
+pthread_mutex_t dir_entry_mutex;
+
 
 typedef enum { T_FILE, T_DIRECTORY , T_SYMLINK} inode_type;
 
@@ -37,6 +39,8 @@ typedef struct{
         char i_symlink[MAX_FILE_NAME];
     };
 } inode_t;
+pthread_mutex_t inode_mutex;
+
 
 typedef enum { FREE = 0, TAKEN = 1 } allocation_state_t;
 
@@ -47,6 +51,7 @@ typedef struct {
     int of_inumber;
     size_t of_offset;
 } open_file_entry_t;
+pthread_mutex_t open_file_mutex;
 
 int state_init(tfs_params);
 int state_destroy(void);

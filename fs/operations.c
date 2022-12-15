@@ -93,6 +93,17 @@ int tfs_open(char const *name, tfs_file_mode_t mode) {
         ALWAYS_ASSERT(inode != NULL,
                       "tfs_open: directory files must have an inode");
 
+        // If the file is a symlink, we need to follow it
+        if (inode->i_node_type == T_SYMLINK) {
+            inum = tfs_lookup(inode->i_symlink, root_dir_inode);
+            if (inum < 0) {
+                return -1;
+            }
+            inode = inode_get(inum);
+            ALWAYS_ASSERT(inode != NULL,
+                          "tfs_open: A symlink must point to a valid file");
+        }
+
         // Truncate (if requested)
         if (mode & TFS_O_TRUNC) {
             if (inode->i_size > 0) {
@@ -153,6 +164,18 @@ int tfs_sym_link(char const *target_file, char const *source_file) {
     ALWAYS_ASSERT(root_dir_inode != NULL,
                 "tfs_open: root dir inode must exist");
 
+    // Check if the target file already exists
+    int inum = tfs_lookup(target_file, root_dir_inode);
+    if (inum >= 0) {
+        return -1;
+    }
+
+    // Check the source file exists
+    inum = tfs_lookup(source_file, root_dir_inode);
+    if (inum < 0) {
+        return -1;
+    }
+
     // We're going to create a new inode for the symlink
     int inum = inode_create(T_SYMLINK);
     if (inum == -1) {
@@ -163,10 +186,11 @@ int tfs_sym_link(char const *target_file, char const *source_file) {
     strcpy(inode->i_symlink, source_file);
 
     // Add entry in the root directory
-    if (add_dir_entry(root_dir_inode, target_file, inum) == -1) {
+    if (add_dir_entry(root_dir_inode, target_file + 1, inum) == -1) {
         inode_delete(inum);
         return -1; // no space in directory
     }
+
     return 0;
 }
 
@@ -191,19 +215,25 @@ int tfs_link(char const *target_file, char const *source_file) {
 
   // Get source_file inum.
   int source_inum = tfs_lookup(source_file, root_dir_inode);
-  // Get source file inode.
-  inode_t *source_inode = inode_get(source_inum);
-
-  if(source_inum >= 0){
-    // We're going to create a new directory entry, in this directory, with the provided name and the source file inum
-    // TODO: deal with errors from add_dir_entry
-    add_dir_entry(root_dir_inode, target_file, source_inum);
-    // We need to increment the source file's hard-link count.
-    source_inode->i_hardlinks++;
-  } else {
-    // If the file does not exist.
+  if (source_inum < 0) {
     return -1;
   }
+
+  // Get source file inode.
+  inode_t *source_inode = inode_get(source_inum);
+    ALWAYS_ASSERT(source_inode != NULL,
+                    "tfs_link: source file must have an inode");
+
+    // We're going to create a new directory entry, in this directory, with the provided name and the source file inum.
+    if (add_dir_entry(root_dir_inode, target_file + 1, source_inum) == -1) {
+        return -1; // no space in directory
+    }
+
+    // Increment the source file link count.
+    source_inode->i_hardlinks++;
+
+    return 0;
+
 }
 
 int tfs_close(int fhandle) {
@@ -321,17 +351,7 @@ int tfs_unlink(char const *target) {
         break;
 
     case T_DIRECTORY:
-        // If it is a directory, we need to check if it is empty. And if it is not the root directory
-        if(inum == ROOT_DIR_INUM){
-            return -1;
-        }
-        if(check_empty_dir(inum)){
-            // If it is empty, we can delete it
-            inode_delete(inum);
-            clear_dir_entry(root_dir_inode, target);
-            return 0;
-        }
-        break;
+        PANIC("tfs_unlink: cannot delete a directory");
 
     case T_SYMLINK:
         // If it is a symlink, we can delete it
