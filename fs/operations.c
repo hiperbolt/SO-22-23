@@ -366,8 +366,7 @@ int tfs_unlink(char const *target) {
 
 int tfs_copy_from_external_fs(char const *source_path, char const *dest_path){
         
-    FILE *source = fopen(&source_path, "r");
-    int size_of_buffer = 128;
+    FILE *source = fopen(source_path, "r");
 
     if(source == NULL){
         return -1;
@@ -380,11 +379,12 @@ int tfs_copy_from_external_fs(char const *source_path, char const *dest_path){
         return -1;
     }
 
+    int size_of_buffer = 128;
     char buffer[size_of_buffer];
 
     while(feof(source)){
         memset(buffer, 0, sizeof(buffer));
-        if(fread(buffer, sizeof(buffer), sizeof(buffer[0]), source) < 0){
+        if(fread(buffer, sizeof(buffer), sizeof(buffer[0]), source) != 0){
             fclose(source);
             tfs_close(dest);
             return -1;
@@ -396,7 +396,7 @@ int tfs_copy_from_external_fs(char const *source_path, char const *dest_path){
         }
     }
 
-    if(fclose(source) == NULL){
+    if(fclose(source) == EOF){
         tfs_close(dest);
         return -1;
     }
