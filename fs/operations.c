@@ -183,8 +183,16 @@ int tfs_sym_link(char const *target_file, char const *source_file) {
     }
 
     inode_t *inode = inode_get(inum);
-    strcpy(inode->i_symlink, source_file);
 
+    /**
+     * Critical section!
+     * 
+     * Writing to inode.
+     */
+    pthread_mutex_lock(&inode->i_mutex);
+    strcpy(inode->i_symlink, source_file);
+    pthread_mutex_unlock(&inode->i_mutex);
+    
     // Add entry in the root directory
     if (add_dir_entry(root_dir_inode, target_file + 1, inum) == -1) {
         inode_delete(inum);
@@ -229,8 +237,15 @@ int tfs_link(char const *target_file, char const *source_file) {
         return -1; // no space in directory
     }
 
+    /**
+     * Critical section!
+     * 
+     * Writing to inode.
+     */
     // Increment the source file link count.
+    pthread_mutex_lock(&source_inode->i_mutex);
     source_inode->i_hardlinks++;
+    pthread_mutex_unlock(&source_inode->i_mutex);
 
     return 0;
 
@@ -254,7 +269,14 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
     }
 
     //  From the open file table entry, we get the inode
+    /**
+     * Critical section!
+     * 
+     * Reading open file entry.
+     */
+    pthread_mutex_lock(&file->open_file_mutex);
     inode_t *inode = inode_get(file->of_inumber);
+    pthread_mutex_unlock(&file->open_file_mutex);
     ALWAYS_ASSERT(inode != NULL, "tfs_write: inode of open file deleted");
 
     // Determine how many bytes to write
@@ -263,6 +285,12 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
         to_write = block_size - file->of_offset;
     }
 
+    /**
+     * Critical section!
+     * 
+     * Reading and writing to inode. Reading and writing to openfile.
+     */
+    pthread_mutex_lock(&inode->i_mutex);
     if (to_write > 0) {
         if (inode->i_size == 0) {
             // If empty file, allocate new block
@@ -277,6 +305,7 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
         void *block = data_block_get(inode->i_data_block);
         ALWAYS_ASSERT(block != NULL, "tfs_write: data block deleted mid-write");
 
+        pthread_mutex_lock(&file->open_file_mutex);
         // Perform the actual write
         memcpy(block + file->of_offset, buffer, to_write);
 
@@ -285,8 +314,10 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
         if (file->of_offset > inode->i_size) {
             inode->i_size = file->of_offset;
         }
+        pthread_mutex_unlock(&file->open_file_mutex);
     }
 
+    pthread_mutex_unlock(&inode->i_mutex);
     return (ssize_t)to_write;
 }
 
@@ -296,18 +327,29 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
         return -1;
     }
 
+    /**
+     * Critical section!
+     * 
+     * Reading inode. Reading and writing to openfile.
+     */
+
     // From the open file table entry, we get the inode
+    pthread_mutex_lock(&file->open_file_mutex);
     inode_t const *inode = inode_get(file->of_inumber);
     ALWAYS_ASSERT(inode != NULL, "tfs_read: inode of open file deleted");
 
     // Determine how many bytes to read
+    pthread_mutex_lock(&inode->i_mutex);
     size_t to_read = inode->i_size - file->of_offset;
+    pthread_mutex_unlock(&inode->i_mutex);    
     if (to_read > len) {
         to_read = len;
     }
 
     if (to_read > 0) {
+        pthread_mutex_lock(&inode->i_mutex);
         void *block = data_block_get(inode->i_data_block);
+        pthread_mutex_unlock(&inode->i_mutex);
         ALWAYS_ASSERT(block != NULL, "tfs_read: data block deleted mid-read");
 
         // Perform the actual read
@@ -316,6 +358,8 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
         file->of_offset += to_read;
     }
 
+
+    pthread_mutex_lock(&file->open_file_mutex);
     return (ssize_t)to_read;
 }
 
@@ -336,7 +380,13 @@ int tfs_unlink(char const *target) {
     // Get the inode
     inode_t *target_inode = inode_get(inum);
 
-    // First we need to determine if it is a file (wether it be a directory or not) or if it is a symlink
+    /**
+     * Critical section!
+     * 
+     * Reading inode. Reading and writing to openfile.
+     */
+    // First we need to determine if it is a file (whether it be a directory or not) or if it is a symlink
+    pthread_mutex_lock(&target_inode->i_mutex);
     switch (target_inode->i_node_type)
     {
     case T_FILE:
@@ -347,17 +397,19 @@ int tfs_unlink(char const *target) {
             inode_delete(inum);
             clear_dir_entry(root_dir_inode, target);
         }
+        pthread_mutex_lock(&target_inode->i_mutex);
         return 0;
-        break;
 
     case T_DIRECTORY:
         PANIC("tfs_unlink: cannot delete a directory");
+        return -1;
 
     case T_SYMLINK:
         // If it is a symlink, we can delete it
         inode_delete(inum);
         clear_dir_entry(root_dir_inode, target);
-        break;
+        return 0;
+
     default:
         PANIC("tfs_unlink: invalid inode type");
         return -1;

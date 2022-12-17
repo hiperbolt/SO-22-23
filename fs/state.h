@@ -11,12 +11,14 @@
 
 /**
  * Directory entry
+ * 
+ * dir_entry_mutex is used to protect the directory entry itself from concurrent access.
  */
 typedef struct {
     char d_name[MAX_FILE_NAME];
     int d_inumber;
+    pthread_mutex_t d_mutex = PTHREAD_MUTEX_INITIALIZER; // automatically initialized
 } dir_entry_t;
-pthread_mutex_t dir_entry_mutex;
 
 
 typedef enum { T_FILE, T_DIRECTORY , T_SYMLINK} inode_type;
@@ -27,9 +29,12 @@ typedef enum { T_FILE, T_DIRECTORY , T_SYMLINK} inode_type;
  * Defined this way to allow for symlinks to be efficiently stored on the inode itself.
  * Inode size is 40 + inode_type enum bytes.
  * 
+ * inode_mutex is used to protect the inode from concurrent access.
+ * 
  */
 typedef struct{
     inode_type i_node_type;
+    pthread_mutex_t i_mutex = PTHREAD_MUTEX_INITIALIZER; // automatically initialized
     union {
         struct {
             int i_hardlinks;
@@ -39,19 +44,22 @@ typedef struct{
         char i_symlink[MAX_FILE_NAME];
     };
 } inode_t;
-pthread_mutex_t inode_mutex;
+
 
 
 typedef enum { FREE = 0, TAKEN = 1 } allocation_state_t;
 
 /**
  * Open file entry (in open file table)
+ * 
+ * open_file_mutex is used to protect the open file entry from concurrent access.
  */
 typedef struct {
     int of_inumber;
     size_t of_offset;
+    pthread_mutex_t open_file_mutex = PTHREAD_MUTEX_INITIALIZER; // automatically initialized
 } open_file_entry_t;
-pthread_mutex_t open_file_mutex;
+
 
 int state_init(tfs_params);
 int state_destroy(void);
