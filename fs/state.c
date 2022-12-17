@@ -142,6 +142,7 @@ int state_init(tfs_params params) {
 
     for (size_t i = 0; i < MAX_OPEN_FILES; i++) {
         free_open_file_entries[i] = FREE;
+        pthread_mutex_init(&open_file_table[i].open_file_mutex, NULL);
     }
 
     // Initialize rwlocks
@@ -247,6 +248,7 @@ int inode_create(inode_type i_type) {
      */
     pthread_rwlock_rdlock(&inode_table_rwlock);
     inode_t *inode = &inode_table[inumber];
+    pthread_mutex_init(&inode->i_mutex, NULL);
     pthread_rwlock_unlock(&inode_table_rwlock);
 
     insert_delay(); // simulate storage access delay (to inode)
@@ -284,6 +286,7 @@ int inode_create(inode_type i_type) {
 
         for (size_t i = 0; i < MAX_DIR_ENTRIES; i++) {
             dir_entry[i].d_inumber = -1;
+            pthread_mutex_init(&dir_entry[i].d_mutex, NULL);
         }
     } break;
     case T_FILE:
@@ -506,14 +509,16 @@ int find_in_dir(inode_t const *inode, char const *sub_name) {
      * 
      * Reading inode.
      */
-    pthread_mutex_lock((pthread_mutex_t *) &inode->i_mutex);
+    // This is a hack to avoid a warning. The inode is not modified.
+    inode_t * inode_to_lock = (inode_t *) inode;
+    pthread_mutex_lock(&inode_to_lock->i_mutex);
     if (inode->i_node_type != T_DIRECTORY) {
         return -1; // not a directory
     }
 
     // Locates the block containing the entries of the directory
     dir_entry_t *dir_entry = (dir_entry_t *)data_block_get(inode->i_data_block);
-    pthread_mutex_unlock((pthread_mutex_t *) &inode->i_mutex);
+    pthread_mutex_unlock(&inode_to_lock->i_mutex);
 
     ALWAYS_ASSERT(dir_entry != NULL,
                   "find_in_dir: directory inode must have a data block");
@@ -553,14 +558,16 @@ int check_empty_dir(inode_t const *inode) {
      * 
      * Reading inode.
      */
-    pthread_mutex_lock((pthread_mutex_t *) &inode->i_mutex);
+    // This is a hack to avoid a warning. The inode is not modified.
+    inode_t * inode_to_lock = (inode_t *) inode;
+    pthread_mutex_lock(&inode_to_lock->i_mutex);
     if (inode->i_node_type != T_DIRECTORY) {
         return -1; // not a directory
     }
 
     // Locates the block containing the entries of the directory
     dir_entry_t *dir_entry = (dir_entry_t *)data_block_get(inode->i_data_block);
-    pthread_mutex_unlock((pthread_mutex_t *) &inode->i_mutex);
+    pthread_mutex_unlock(&inode_to_lock->i_mutex);
 
     ALWAYS_ASSERT(dir_entry != NULL,
                   "check_empty_dir: directory inode must have a data block");
