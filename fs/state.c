@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <pthread.h>
+
 
 /*
  * Persistent FS state
@@ -291,7 +293,7 @@ int inode_create(inode_type i_type) {
         break;
     case T_SYMLINK:
         // In case of a new symlink, set i_symlink to NULL
-        strcpy(inode_table[inumber].i_symlink, NULL);
+        strcpy(inode_table[inumber].i_symlink, "-1");
         break;
     default:
         PANIC("inode_create: unknown file type");
@@ -504,14 +506,14 @@ int find_in_dir(inode_t const *inode, char const *sub_name) {
      * 
      * Reading inode.
      */
-    pthread_mutex_lock(&inode->i_mutex);
+    pthread_mutex_lock((pthread_mutex_t *) &inode->i_mutex);
     if (inode->i_node_type != T_DIRECTORY) {
         return -1; // not a directory
     }
 
     // Locates the block containing the entries of the directory
     dir_entry_t *dir_entry = (dir_entry_t *)data_block_get(inode->i_data_block);
-    pthread_mutex_unlock(&inode->i_mutex);
+    pthread_mutex_unlock((pthread_mutex_t *) &inode->i_mutex);
 
     ALWAYS_ASSERT(dir_entry != NULL,
                   "find_in_dir: directory inode must have a data block");
@@ -551,14 +553,14 @@ int check_empty_dir(inode_t const *inode) {
      * 
      * Reading inode.
      */
-    pthread_mutex_lock(&inode->i_mutex);
+    pthread_mutex_lock((pthread_mutex_t *) &inode->i_mutex);
     if (inode->i_node_type != T_DIRECTORY) {
         return -1; // not a directory
     }
 
     // Locates the block containing the entries of the directory
     dir_entry_t *dir_entry = (dir_entry_t *)data_block_get(inode->i_data_block);
-    pthread_mutex_unlock(&inode->i_mutex);
+    pthread_mutex_unlock((pthread_mutex_t *) &inode->i_mutex);
 
     ALWAYS_ASSERT(dir_entry != NULL,
                   "check_empty_dir: directory inode must have a data block");
@@ -572,12 +574,12 @@ int check_empty_dir(inode_t const *inode) {
      * Reading dir entry.
      */
     for (int i = 0; i < MAX_DIR_ENTRIES; i++){
-        pthread_mutex_lock(dir_entry[i].d_mutex);
+        pthread_mutex_lock(&dir_entry[i].d_mutex);
         if (dir_entry[i].d_inumber != -1) {
-            pthread_mutex_unlock(dir_entry[i].d_mutex);
+            pthread_mutex_unlock(&dir_entry[i].d_mutex);
             return -1;
         }
-        pthread_mutex_unlock(dir_entry[i].d_mutex);
+        pthread_mutex_unlock(&dir_entry[i].d_mutex);
     }
 
     return 0;
@@ -664,10 +666,10 @@ int add_to_open_file_table(int inumber, size_t offset) {
         if (free_open_file_entries[i] == FREE) {
             free_open_file_entries[i] = TAKEN;
             pthread_rwlock_unlock(&open_file_table_rwlock);
-            pthread_mutex_lock(open_file_table[i].open_file_mutex);
+            pthread_mutex_lock(&open_file_table[i].open_file_mutex);
             open_file_table[i].of_inumber = inumber;
             open_file_table[i].of_offset = offset;
-            pthread_mutex_unlock(open_file_table[i].open_file_mutex);
+            pthread_mutex_unlock(&open_file_table[i].open_file_mutex);
             return i;
         }
 

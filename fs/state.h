@@ -8,6 +8,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
+#include <pthread.h>
+
 
 /**
  * Directory entry
@@ -17,7 +19,7 @@
 typedef struct {
     char d_name[MAX_FILE_NAME];
     int d_inumber;
-    pthread_mutex_t d_mutex = PTHREAD_MUTEX_INITIALIZER; // automatically initialized
+    pthread_mutex_t d_mutex;
 } dir_entry_t;
 
 
@@ -34,7 +36,7 @@ typedef enum { T_FILE, T_DIRECTORY , T_SYMLINK} inode_type;
  */
 typedef struct{
     inode_type i_node_type;
-    pthread_mutex_t i_mutex = PTHREAD_MUTEX_INITIALIZER; // automatically initialized
+    pthread_mutex_t i_mutex;
     union {
         struct {
             int i_hardlinks;
@@ -57,7 +59,7 @@ typedef enum { FREE = 0, TAKEN = 1 } allocation_state_t;
 typedef struct {
     int of_inumber;
     size_t of_offset;
-    pthread_mutex_t open_file_mutex = PTHREAD_MUTEX_INITIALIZER; // automatically initialized
+    pthread_mutex_t open_file_mutex;
 } open_file_entry_t;
 
 

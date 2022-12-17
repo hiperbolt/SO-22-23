@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <pthread.h>
 
 #include "betterassert.h"
 
@@ -164,15 +165,15 @@ int tfs_sym_link(char const *target_file, char const *source_file) {
     ALWAYS_ASSERT(root_dir_inode != NULL,
                 "tfs_open: root dir inode must exist");
 
-    // Check if the target file already exists
-    int inum = tfs_lookup(target_file, root_dir_inode);
-    if (inum >= 0) {
+    // Check if the target file doesn't already exist
+    int target_inum = tfs_lookup(target_file, root_dir_inode);
+    if (target_inum >= 0) {
         return -1;
     }
 
     // Check the source file exists
-    inum = tfs_lookup(source_file, root_dir_inode);
-    if (inum < 0) {
+    int source_inum = tfs_lookup(source_file, root_dir_inode);
+    if (source_inum < 0) {
         return -1;
     }
 
@@ -339,17 +340,17 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
     ALWAYS_ASSERT(inode != NULL, "tfs_read: inode of open file deleted");
 
     // Determine how many bytes to read
-    pthread_mutex_lock(&inode->i_mutex);
+    pthread_mutex_lock((pthread_mutex_t *) &inode->i_mutex);
     size_t to_read = inode->i_size - file->of_offset;
-    pthread_mutex_unlock(&inode->i_mutex);    
+    pthread_mutex_unlock((pthread_mutex_t *) &inode->i_mutex);    
     if (to_read > len) {
         to_read = len;
     }
 
     if (to_read > 0) {
-        pthread_mutex_lock(&inode->i_mutex);
+        pthread_mutex_lock((pthread_mutex_t *) &inode->i_mutex);
         void *block = data_block_get(inode->i_data_block);
-        pthread_mutex_unlock(&inode->i_mutex);
+        pthread_mutex_unlock((pthread_mutex_t *) &inode->i_mutex);
         ALWAYS_ASSERT(block != NULL, "tfs_read: data block deleted mid-read");
 
         // Perform the actual read
@@ -456,4 +457,5 @@ int tfs_copy_from_external_fs(char const *source_path, char const *dest_path){
     if(tfs_close(dest) == -1){
         return -1;
     }
+    return 0;
 }
