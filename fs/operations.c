@@ -238,6 +238,11 @@ int tfs_link(char const *source_file, char const *target_file) {
     ALWAYS_ASSERT(source_inode != NULL,
                     "tfs_link: source file must have an inode");
 
+    // Check if the source file is a symlink
+    if (source_inode->i_node_type == T_SYMLINK) {
+        return -1; // cannot hardlink to a symlink
+    }
+
     // We're going to create a new directory entry, in this directory, with the provided name and the source file inum.
     if (add_dir_entry(root_dir_inode, target_file + 1, source_inum) == -1) {
         return -1; // no space in directory
