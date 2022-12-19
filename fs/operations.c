@@ -108,6 +108,7 @@ int tfs_open(char const *name, tfs_file_mode_t mode) {
         }
         pthread_mutex_unlock(&inode->i_mutex);
 
+
         // Truncate (if requested)
         if (mode & TFS_O_TRUNC) {
             pthread_mutex_lock(&inode->i_mutex);
