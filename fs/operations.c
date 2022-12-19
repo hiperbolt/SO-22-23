@@ -94,32 +94,34 @@ int tfs_open(char const *name, tfs_file_mode_t mode) {
         ALWAYS_ASSERT(inode != NULL,
                       "tfs_open: directory files must have an inode");
 
-        // If the file is a symlink, we need to follow it
-        // TODO: CONCURRENCY: this is not thread-safe
-        if (inode->i_node_type == T_SYMLINK) {
-            const char *link_path = inode->i_symlink;
-            int pointed_by_link_inum = tfs_lookup(link_path, root_dir_inode);
-            if (pointed_by_link_inum < 0) {
-                return -1; // the file pointed to by the symlink does not exist
+        // If the file is a symlink, we need to follow it until we find a T_FILE inode
+        pthread_mutex_lock(&inode->i_mutex);
+        while (inode->i_node_type == T_SYMLINK) {
+            inum = tfs_lookup(inode->i_symlink, root_dir_inode);
+            if (inum < 0) {
+                pthread_mutex_unlock(&inode->i_mutex);
+                return -1;
             }
-            inode = inode_get(pointed_by_link_inum);
+            inode = inode_get(inum);
             ALWAYS_ASSERT(inode != NULL,
-                          "tfs_open: A symlink must point to a valid file");
-            if (inode == NULL) {
-                return -1; // the file pointed to by the symlink does not exist
-            }
+                          "tfs_open: symlink files must have an inode");
         }
+        pthread_mutex_unlock(&inode->i_mutex);
 
         // Truncate (if requested)
         if (mode & TFS_O_TRUNC) {
+            pthread_mutex_lock(&inode->i_mutex);
             if (inode->i_size > 0) {
                 data_block_free(inode->i_data_block);
                 inode->i_size = 0;
             }
+            pthread_mutex_unlock(&inode->i_mutex);
         }
         // Determine initial offset
         if (mode & TFS_O_APPEND) {
+            pthread_mutex_lock(&inode->i_mutex);
             offset = inode->i_size;
+            pthread_mutex_unlock(&inode->i_mutex);
         } else {
             offset = 0;
         }
