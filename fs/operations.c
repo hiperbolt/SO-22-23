@@ -382,9 +382,13 @@ int tfs_unlink(char const *target) {
 
     // Get the inode number of the file we want to delete
     int inum = tfs_lookup(target, root_dir_inode);
+    if (inum == -1) {
+        return -1;
+    }
 
     // Get the inode
     inode_t *target_inode = inode_get(inum);
+    ALWAYS_ASSERT(target_inode != NULL, "tfs_unlink: target inode must exist");
 
     /**
      * Critical section!
@@ -401,7 +405,11 @@ int tfs_unlink(char const *target) {
         // If the hard link count is 0, we need to delete the file
         if(target_inode->i_hardlinks == 0){
             inode_delete(inum);
-            clear_dir_entry(root_dir_inode, target);
+            if (clear_dir_entry(root_dir_inode, target) == -1) {
+                PANIC("tfs_unlink: failed to clear dir entry");
+                pthread_mutex_unlock(&target_inode->i_mutex);
+                return -1;
+            }
         }
         pthread_mutex_unlock(&target_inode->i_mutex);
         return 0;
