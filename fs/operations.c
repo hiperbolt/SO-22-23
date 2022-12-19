@@ -472,35 +472,32 @@ int tfs_unlink(char const *target) {
 }
 
 int tfs_copy_from_external_fs(char const *source_path, char const *dest_path){
-        
+    
+    // Open the soure file in reading mode and checks if its null
     FILE *source = fopen(source_path, "r");
-
     if(source == NULL){
         return -1;
     }
 
-    int dest = tfs_open(dest_path, TFS_O_CREAT);
-
+    // Opens or creates the destination file 
+    int dest = tfs_open(dest_path, TFS_O_CREAT | TFS_O_TRUNC);
     if (dest == -1){
         fclose(source);
         return -1;
     }
 
-    int size_of_buffer = 128;
+    tfs_params params = tfs_default_params();
+    size_t size_of_buffer = params.block_size;
     char buffer[size_of_buffer];
-
-    while(feof(source)){
-        memset(buffer, 0, sizeof(buffer));
-        if(fread(buffer, sizeof(buffer), sizeof(buffer[0]), source) != 0){
-            fclose(source);
-            tfs_close(dest);
-            return -1;
-        }
-        if(tfs_write(dest, buffer, sizeof(buffer)) == -1){
-            fclose(source);
-            tfs_close(dest);
-            return -1;
-        }
+    size_t size;
+    memset(buffer, 0, sizeof(buffer));
+    // Gets the text from the source file and copies it to the buffer
+    size = fread(buffer, sizeof(char), sizeof(buffer), source);
+    // Copies the text form the buffer and overwrites it on the destination file
+    if(tfs_write(dest, buffer, size) == -1){
+        fclose(source);
+        tfs_close(dest);
+        return -1;
     }
 
     if(fclose(source) == EOF){
