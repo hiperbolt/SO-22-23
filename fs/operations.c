@@ -404,12 +404,13 @@ int tfs_unlink(char const *target) {
         target_inode->i_hardlinks--;
         // If the hard link count is 0, we need to delete the file
         if(target_inode->i_hardlinks == 0){
-            inode_delete(inum);
-            if (clear_dir_entry(root_dir_inode, target) == -1) {
+            // we need to unlock here to prevent deadlock
+            pthread_mutex_unlock(&target_inode->i_mutex);
+            if (clear_dir_entry(root_dir_inode, target +1) == -1) {
                 PANIC("tfs_unlink: failed to clear dir entry");
-                pthread_mutex_unlock(&target_inode->i_mutex);
                 return -1;
             }
+            inode_delete(inum);
         }
         pthread_mutex_unlock(&target_inode->i_mutex);
         return 0;
@@ -421,8 +422,8 @@ int tfs_unlink(char const *target) {
 
     case T_SYMLINK:
         // If it is a symlink, we can delete it
+        clear_dir_entry(root_dir_inode, target+1);
         inode_delete(inum);
-        clear_dir_entry(root_dir_inode, target);
         pthread_mutex_unlock(&target_inode->i_mutex);
         return 0;
 
