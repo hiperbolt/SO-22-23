@@ -217,30 +217,39 @@ int tfs_sym_link(char const *source_file, char const *target_file) {
  */
 
 int tfs_link(char const *source_file, char const *target_file) {
-  // Check if both paths are valid
-  if (!valid_pathname(target_file) || !valid_pathname(source_file)) {
+    // Check if both paths are valid
+    if (!valid_pathname(target_file) || !valid_pathname(source_file)) {
+            return -1;
+    }
+    
+    // Make sure the root dir inode exists, and get it.
+    inode_t *root_dir_inode = inode_get(ROOT_DIR_INUM);
+    ALWAYS_ASSERT(root_dir_inode != NULL,
+                    "tfs_open: root dir inode must exist");
+
+    // Get source_file inum.
+    int source_inum = tfs_lookup(source_file, root_dir_inode);
+    if (source_inum < 0) {
         return -1;
-  }
-  
-  // Make sure the root dir inode exists, and get it.
-  inode_t *root_dir_inode = inode_get(ROOT_DIR_INUM);
-  ALWAYS_ASSERT(root_dir_inode != NULL,
-                "tfs_open: root dir inode must exist");
+    }
 
-  // Get source_file inum.
-  int source_inum = tfs_lookup(source_file, root_dir_inode);
-  if (source_inum < 0) {
-    return -1;
-  }
-
-  // Get source file inode.
-  inode_t *source_inode = inode_get(source_inum);
-    ALWAYS_ASSERT(source_inode != NULL,
-                    "tfs_link: source file must have an inode");
+    // Get source file inode.
+    inode_t *source_inode = inode_get(source_inum);
+        ALWAYS_ASSERT(source_inode != NULL,
+                        "tfs_link: source file must have an inode");
 
     // Check if the source file is a symlink
+    pthread_mutex_lock(&source_inode->i_mutex);
     if (source_inode->i_node_type == T_SYMLINK) {
+        pthread_mutex_unlock(&source_inode->i_mutex);
         return -1; // cannot hardlink to a symlink
+    }
+    pthread_mutex_unlock(&source_inode->i_mutex);
+
+    // Check if the target file doesn't already exist
+    int target_inum = tfs_lookup(target_file, root_dir_inode);
+    if (target_inum >= 0) {
+        return -1;
     }
 
     // We're going to create a new directory entry, in this directory, with the provided name and the source file inum.
@@ -444,14 +453,11 @@ int tfs_unlink(char const *target) {
     case T_FILE:
         // If it is a file, we need to decrement the hard link count
         target_inode->i_hardlinks--;
+        clear_dir_entry(root_dir_inode, target + 1);
         // If the hard link count is 0, we need to delete the file
         if(target_inode->i_hardlinks == 0){
             // we need to unlock here to prevent deadlock
             pthread_mutex_unlock(&target_inode->i_mutex);
-            if (clear_dir_entry(root_dir_inode, target +1) == -1) {
-                PANIC("tfs_unlink: failed to clear dir entry");
-                return -1;
-            }
             inode_delete(inum);
         }
         pthread_mutex_unlock(&target_inode->i_mutex);

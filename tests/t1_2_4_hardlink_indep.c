@@ -30,7 +30,6 @@ int _link(size_t rep_target, size_t file_idx_target, size_t rep_name,
 
     char name[MAX_PATH_SIZE];
     _format_path(name, MAX_PATH_SIZE, rep_name, file_idx_name);
-
     return tfs_link(target, name);
 }
 
