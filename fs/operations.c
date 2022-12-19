@@ -285,6 +285,27 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
     pthread_mutex_unlock(&file->open_file_mutex);
     ALWAYS_ASSERT(inode != NULL, "tfs_write: inode of open file deleted");
 
+    // If it is a symlink, we need to follow it until we get to an actual file.
+    while (inode->i_node_type == T_SYMLINK) {
+        /**
+         * Critical section!
+         * 
+         * Reading inode.
+         */
+        pthread_mutex_lock(&inode->i_mutex);
+        char *symlink = inode->i_symlink;
+        pthread_mutex_unlock(&inode->i_mutex);
+
+        // Get the inode of the symlink target
+        int inum = tfs_lookup(symlink, inode_get(ROOT_DIR_INUM));
+        if (inum < 0) {
+            return -1;
+        }
+
+        inode = inode_get(inum);
+        ALWAYS_ASSERT(inode != NULL, "tfs_write: inode of symlink target deleted");
+    }
+
     // Determine how many bytes to write
     size_t block_size = state_block_size();
     if (to_write + file->of_offset > block_size) {
@@ -342,6 +363,22 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
     pthread_mutex_lock(&file->open_file_mutex);
     inode_t  *inode = inode_get(file->of_inumber);
     ALWAYS_ASSERT(inode != NULL, "tfs_read: inode of open file deleted");
+
+    // If it is a symlink, we need to follow it until we get to an actual file.
+    while (inode->i_node_type == T_SYMLINK) {
+        pthread_mutex_lock(&inode->i_mutex);
+        char *symlink = inode->i_symlink;
+        pthread_mutex_unlock(&inode->i_mutex);
+
+        // Get the inode of the symlink target
+        int inum = tfs_lookup(symlink, inode_get(ROOT_DIR_INUM));
+        if (inum < 0) {
+            return -1;
+        }
+
+        inode = inode_get(inum);
+        ALWAYS_ASSERT(inode != NULL, "tfs_read: inode of symlink target deleted");
+    }
 
     
     // Determine how many bytes to read
