@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <pthread.h>
 
 #include "betterassert.h"
 
@@ -37,7 +38,6 @@ int tfs_init(tfs_params const *params_ptr) {
     if (root != ROOT_DIR_INUM) {
         return -1;
     }
-
     return 0;
 }
 
@@ -64,7 +64,8 @@ static bool valid_pathname(char const *name) {
  * Returns the inumber of the file, -1 if unsuccessful.
  */
 static int tfs_lookup(char const *name, inode_t const *root_inode) {
-    // TODO: assert that root_inode is the root directory
+    ALWAYS_ASSERT(root_inode != NULL, "tfs_lookup: root inode must exist");
+
     if (!valid_pathname(name)) {
         return -1;
     }
@@ -103,7 +104,6 @@ int tfs_open(char const *name, tfs_file_mode_t mode) {
             ALWAYS_ASSERT(inode != NULL,
                           "tfs_open: symlink files must have an inode");
         }
-
 
         // Truncate (if requested)
         if (mode & TFS_O_TRUNC) {

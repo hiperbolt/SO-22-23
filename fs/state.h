@@ -14,7 +14,6 @@
 /**
  * Directory entry
  * 
- * dir_entry_mutex is used to protect the directory entry itself from concurrent access.
  */
 typedef struct {
     char d_name[MAX_FILE_NAME];
@@ -34,7 +33,6 @@ typedef enum { ON_INODE, ON_DISK } symlink_location;
  * Defined this way to allow for symlinks to be efficiently stored on the inode itself.
  * Inode size is 40 + inode_type enum bytes.
  * 
- * inode_mutex is used to protect the inode from concurrent access.
  * 
  */
 typedef struct{
@@ -57,7 +55,6 @@ typedef enum { FREE = 0, TAKEN = 1 } allocation_state_t;
 /**
  * Open file entry (in open file table)
  * 
- * open_file_mutex is used to protect the open file entry from concurrent access.
  */
 typedef struct {
     int of_inumber;
@@ -68,6 +65,12 @@ typedef struct {
 
 int state_init(tfs_params);
 int state_destroy(void);
+
+pthread_rwlock_t * get_inode_table_rwlock(void);
+pthread_rwlock_t * get_open_file_table_rwlock(void);
+pthread_rwlock_t * get_dir_entries_table_rwlock(void);
+pthread_mutex_t * get_inode_mutexes_table(void);
+pthread_mutex_t * get_open_file_entry_mutexes(void);
 
 size_t state_block_size(void);
 
