@@ -475,7 +475,9 @@ int tfs_unlink(char const *target) {
         clear_dir_entry(root_dir_inode, target + 1);
         // If the hard link count is 0, we need to delete the file
         if(get_inode_hardlinks(target_inode) == 0){
-            inode_delete(inum); // Destroys the mutex either ways.
+            pthread_mutex_unlock(&inode_mutexes_table[inum]);
+            inode_delete(inum);
+            return 0;
         }
         pthread_mutex_unlock(&inode_mutexes_table[inum]);
         return 0;
