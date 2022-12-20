@@ -24,6 +24,9 @@ typedef struct {
 
 
 typedef enum { T_FILE, T_DIRECTORY , T_SYMLINK} inode_type;
+typedef enum { ON_INODE, ON_DISK } symlink_location;
+
+#define MAX_INODE_SYMLINK_SIZE 16 // 4 + 8 + 4 , padding is not guaranteed
 
 /**
  * Inode
@@ -36,14 +39,14 @@ typedef enum { T_FILE, T_DIRECTORY , T_SYMLINK} inode_type;
  */
 typedef struct{
     inode_type i_node_type;
-    pthread_mutex_t i_mutex;
+    symlink_location i_symlink_location;
     union {
         struct {
             int i_hardlinks;
             size_t i_size;
             int i_data_block;
         };
-        char i_symlink[MAX_FILE_NAME];
+        char i_symlink[MAX_INODE_SYMLINK_SIZE];
     };
 } inode_t;
 
@@ -83,5 +86,8 @@ void *data_block_get(int block_number);
 int add_to_open_file_table(int inumber, size_t offset);
 void remove_from_open_file_table(int fhandle);
 open_file_entry_t *get_open_file_entry(int fhandle);
+
+int inode_set_symlink(int inumber, char const *symlink);
+char *inode_get_symlink(int inumber);
 
 #endif // STATE_H
