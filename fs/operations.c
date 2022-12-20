@@ -9,6 +9,12 @@
 
 #include "betterassert.h"
 
+extern pthread_rwlock_t inode_table_rwlock;
+extern pthread_rwlock_t open_file_table_rwlock;
+extern pthread_rwlock_t dir_entries_table_rwlock;
+
+extern pthread_mutex_t * inode_mutexes_table;
+extern pthread_mutex_t * open_file_entry_mutexes;
 
 
 tfs_params tfs_default_params() {

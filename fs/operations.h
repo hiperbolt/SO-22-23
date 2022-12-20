@@ -4,13 +4,6 @@
 #include "config.h"
 #include <sys/types.h>
 
-static pthread_rwlock_t * inode_table_rwlock;
-static pthread_rwlock_t * open_file_table_rwlock;
-static pthread_rwlock_t * dir_entries_table_rwlock;
-
-static pthread_mutex_t * inode_mutexes_table;
-static pthread_mutex_t * open_file_entry_mutexes;
-
 /**
  * TécnicoFS parameters.
  */

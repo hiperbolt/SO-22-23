@@ -51,6 +51,12 @@ static allocation_state_t *free_open_file_entries;
  * We protect the "table" (this is, the directory data block) for the same reason as above, while having a mutex for a singular dir entry.
  */
 
+pthread_rwlock_t inode_table_rwlock;
+pthread_rwlock_t open_file_table_rwlock;
+pthread_rwlock_t dir_entries_table_rwlock;
+
+pthread_mutex_t * inode_mutexes_table;
+pthread_mutex_t * open_file_entry_mutexes;
 
 static inline bool valid_inumber(int inumber) {
     return inumber >= 0 && inumber < INODE_TABLE_SIZE;
