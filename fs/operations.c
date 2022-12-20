@@ -101,26 +101,40 @@ int tfs_open(char const *name, tfs_file_mode_t mode) {
                       "tfs_open: directory files must have an inode");
 
         // If the file is a symlink, we need to follow it until we find a T_FILE inode
-        while (get_inode_type(inode) == T_SYMLINK){
-            inum = tfs_lookup(inode_get_symlink(inum), root_dir_inode);
+        // This is a very problematic area concurrency-wise. Should be refactored eventually.
+        pthread_mutex_lock(&inode_mutexes_table[inum]);
+        inode_type type = get_inode_type(inode);
+        pthread_mutex_unlock(&inode_mutexes_table[inum]);
+        while (type == T_SYMLINK){
+            pthread_mutex_lock(&inode_mutexes_table[inum]);
+            char * symlink = inode_get_symlink(inum);
+            pthread_mutex_unlock(&inode_mutexes_table[inum]);
+            inum = tfs_lookup(symlink, root_dir_inode);
             if (inum < 0){
                 return -1;
             }
             inode = inode_get(inum);
             ALWAYS_ASSERT(inode != NULL,
                           "tfs_open: symlink files must have an inode");
+             pthread_mutex_lock(&inode_mutexes_table[inum]);             
+            type = get_inode_type(inode);
+            pthread_mutex_unlock(&inode_mutexes_table[inum]);
         }
 
         // Truncate (if requested)
         if (mode & TFS_O_TRUNC) {
+            pthread_mutex_lock(&inode_mutexes_table[inum]);
             if (get_inode_size(inode) > 0) {
                 data_block_free(get_inode_data_block(inode));
                 set_inode_size(inode, 0);
             }
+            pthread_mutex_unlock(&inode_mutexes_table[inum]);
         }
         // Determine initial offset
         if (mode & TFS_O_APPEND) {
+            pthread_mutex_lock(&inode_mutexes_table[inum]);
             offset = get_inode_size(inode);
+            pthread_mutex_unlock(&inode_mutexes_table[inum]);
         } else {
             offset = 0;
         }
@@ -190,9 +204,12 @@ int tfs_sym_link(char const *source_file, char const *target_file) {
     }
 
     // Copy the source file name into the symlink
+    pthread_mutex_lock(&inode_mutexes_table[inum]);
     if(inode_set_symlink(inum, source_file) == -1) {
+        pthread_mutex_unlock(&inode_mutexes_table[inum]);
         return -1;
     }
+    pthread_mutex_unlock(&inode_mutexes_table[inum]);
     
     // Add entry in the root directory
     if (add_dir_entry(root_dir_inode, target_file + 1, inum) == -1) {
@@ -234,7 +251,9 @@ int tfs_link(char const *source_file, char const *target_file) {
                         "tfs_link: source file must have an inode");
 
     // Check if the source file is a symlink
+    pthread_mutex_lock(&inode_mutexes_table[source_inum]);
     inode_type source_type = get_inode_type(source_inode);
+    pthread_mutex_unlock(&inode_mutexes_table[source_inum]);
     if (source_type == T_SYMLINK) {
         return -1; // cannot hardlink to a symlink
     }
@@ -251,7 +270,9 @@ int tfs_link(char const *source_file, char const *target_file) {
     }
 
     // Increment the source file link count.
+    pthread_mutex_lock(&inode_mutexes_table[source_inum]);
     increment_inode_hardlinks(source_inode);
+    pthread_mutex_unlock(&inode_mutexes_table[source_inum]);
     return 0;
 
 }
@@ -279,14 +300,13 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
     ALWAYS_ASSERT(inode != NULL, "tfs_write: inode of open file deleted");
 
     // If it is a symlink, we need to follow it until we get to an actual file.
+    pthread_mutex_lock(&inode_mutexes_table[file_inum]);
     inode_type type = get_inode_type(inode);
+    pthread_mutex_unlock(&inode_mutexes_table[file_inum]);
     while (type == T_SYMLINK) {
-        /**
-         * Critical section!
-         * 
-         * Reading inode.
-         */
+        pthread_mutex_lock(&inode_mutexes_table[file_inum]);
         char *symlink = inode_get_symlink(file_inum);
+        pthread_mutex_unlock(&inode_mutexes_table[file_inum]);
 
         // Get the inode of the symlink target
         int inum = tfs_lookup(symlink, inode_get(ROOT_DIR_INUM));
@@ -300,7 +320,9 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
 
     // Determine how many bytes to write
     size_t block_size = state_block_size();
+    pthread_mutex_lock(&open_file_entry_mutexes[fhandle]);
     size_t file_offset = get_open_file_offset(file);
+    pthread_mutex_unlock(&open_file_entry_mutexes[fhandle]);
     if (to_write + file_offset > block_size) {
         to_write = block_size - file_offset;
     }
@@ -311,28 +333,37 @@ ssize_t tfs_write(int fhandle, void const *buffer, size_t to_write) {
      * Reading and writing to inode. Reading and writing to openfile.
      */
     if (to_write > 0) {
+        pthread_mutex_lock(&inode_mutexes_table[file_inum]);
         size_t inode_size = get_inode_size(inode);
+        pthread_mutex_unlock(&inode_mutexes_table[file_inum]);
         if (inode_size == 0) {
             // If empty file, allocate new block
             int bnum = data_block_alloc();
             if (bnum == -1) {
                 return -1; // no space
             }
-
+            pthread_mutex_lock(&inode_mutexes_table[file_inum]);
             set_inode_data_block(inode, bnum);
+            pthread_mutex_unlock(&inode_mutexes_table[file_inum]);
         }
-
+        pthread_mutex_lock(&inode_mutexes_table[file_inum]);
         void *block = data_block_get(get_inode_data_block(inode));
+        pthread_mutex_unlock(&inode_mutexes_table[file_inum]);
         ALWAYS_ASSERT(block != NULL, "tfs_write: data block deleted mid-write");
 
         // Perform the actual write
         memcpy(block + file_offset, buffer, to_write);
 
         // The offset associated with the file handle is incremented accordingly
+        pthread_mutex_lock(&open_file_entry_mutexes[fhandle]);
         increment_open_file_offset(file, to_write);
         if (get_open_file_offset(file) > inode_size) {
+            pthread_mutex_lock(&inode_mutexes_table[file_inum]);
             set_inode_size(inode, get_open_file_offset(file));
+            pthread_mutex_unlock(&inode_mutexes_table[file_inum]);
         }
+        pthread_mutex_unlock(&open_file_entry_mutexes[fhandle]);
+        
     }
 
     return (ssize_t)to_write;
@@ -345,38 +376,60 @@ ssize_t tfs_read(int fhandle, void *buffer, size_t len) {
     }
 
     // From the open file table entry, we get the inode
-    inode_t  *inode = inode_get(get_open_file_inumber(file));
+    pthread_mutex_lock(&open_file_entry_mutexes[fhandle]);
+    int inum = get_open_file_inumber(file);
+    pthread_mutex_unlock(&open_file_entry_mutexes[fhandle]);
+
+    inode_t * inode = inode_get(inum);
+
     ALWAYS_ASSERT(inode != NULL, "tfs_read: inode of open file deleted");
 
     // If it is a symlink, we need to follow it until we get to an actual file.
-    while (get_inode_type(inode) == T_SYMLINK) {
-        char *symlink = inode_get_symlink(get_open_file_inumber(file));
+    pthread_mutex_lock(&inode_mutexes_table[inum]);
+    inode_type type = get_inode_type(inode);
+    pthread_mutex_unlock(&inode_mutexes_table[inum]);
+    while (type == T_SYMLINK) {
+        pthread_mutex_lock(&inode_mutexes_table[inum]);
+        char *symlink = inode_get_symlink(inum);
+        pthread_mutex_lock(&inode_mutexes_table[inum]);
 
         // Get the inode of the symlink target
-        int inum = tfs_lookup(symlink, inode_get(ROOT_DIR_INUM));
+        inum = tfs_lookup(symlink, inode_get(ROOT_DIR_INUM));
         if (inum < 0) {
             return -1;
         }
 
         inode = inode_get(inum);
         ALWAYS_ASSERT(inode != NULL, "tfs_read: inode of symlink target deleted");
+        pthread_mutex_lock(&inode_mutexes_table[inum]);
+        type = get_inode_type(inode);
+        pthread_mutex_unlock(&inode_mutexes_table[inum]);
     }
 
     
     // Determine how many bytes to read
+    pthread_mutex_lock(&inode_mutexes_table[inum]);
+    pthread_mutex_lock(&open_file_entry_mutexes[fhandle]);
     size_t to_read = get_inode_size(inode) - get_open_file_offset(file);
+    pthread_mutex_unlock(&open_file_entry_mutexes[fhandle]);
+    pthread_mutex_unlock(&inode_mutexes_table[inum]);
+
     if (to_read > len) {
         to_read = len;
     }
 
     if (to_read > 0) {
+        pthread_mutex_lock(&inode_mutexes_table[inum]);
         void *block = data_block_get(get_inode_data_block(inode));
+        pthread_mutex_unlock(&inode_mutexes_table[inum]);
         ALWAYS_ASSERT(block != NULL, "tfs_read: data block deleted mid-read");
 
+        pthread_mutex_lock(&open_file_entry_mutexes[fhandle]);
         // Perform the actual read
         memcpy(buffer, block + get_open_file_offset(file), to_read);
         // The offset associated with the file handle is incremented accordingly
         increment_open_file_offset(file, to_read);
+        pthread_mutex_unlock(&open_file_entry_mutexes[fhandle]);
     }
     
     return (ssize_t)to_read;
@@ -409,17 +462,22 @@ int tfs_unlink(char const *target) {
      * Reading inode. Reading and writing to openfile.
      */
     // First we need to determine if it is a file (whether it be a directory or not) or if it is a symlink
+    pthread_mutex_lock(&inode_mutexes_table[inum]);
     inode_type target_type = get_inode_type(target_inode);
+    pthread_mutex_unlock(&inode_mutexes_table[inum]);
+
     switch (target_type)
     {
     case T_FILE:
         // If it is a file, we need to decrement the hard link count
+        pthread_mutex_lock(&inode_mutexes_table[inum]);
         decrement_inode_hardlinks(target_inode);
         clear_dir_entry(root_dir_inode, target + 1);
         // If the hard link count is 0, we need to delete the file
         if(get_inode_hardlinks(target_inode) == 0){
-            inode_delete(inum);
+            inode_delete(inum); // Destroys the mutex either ways.
         }
+        pthread_mutex_unlock(&inode_mutexes_table[inum]);
         return 0;
 
     case T_DIRECTORY:
