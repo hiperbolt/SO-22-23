@@ -95,34 +95,27 @@ int tfs_open(char const *name, tfs_file_mode_t mode) {
                       "tfs_open: directory files must have an inode");
 
         // If the file is a symlink, we need to follow it until we find a T_FILE inode
-        pthread_mutex_lock(&inode->i_mutex);
-        while (inode->i_node_type == T_SYMLINK) {
+        while (inode->i_node_type == T_SYMLINK){
             inum = tfs_lookup(inode->i_symlink, root_dir_inode);
-            if (inum < 0) {
-                pthread_mutex_unlock(&inode->i_mutex);
+            if (inum < 0){
                 return -1;
             }
             inode = inode_get(inum);
             ALWAYS_ASSERT(inode != NULL,
                           "tfs_open: symlink files must have an inode");
         }
-        pthread_mutex_unlock(&inode->i_mutex);
 
 
         // Truncate (if requested)
         if (mode & TFS_O_TRUNC) {
-            pthread_mutex_lock(&inode->i_mutex);
             if (inode->i_size > 0) {
                 data_block_free(inode->i_data_block);
                 inode->i_size = 0;
             }
-            pthread_mutex_unlock(&inode->i_mutex);
         }
         // Determine initial offset
         if (mode & TFS_O_APPEND) {
-            pthread_mutex_lock(&inode->i_mutex);
             offset = inode->i_size;
-            pthread_mutex_unlock(&inode->i_mutex);
         } else {
             offset = 0;
         }
