@@ -90,4 +90,19 @@ open_file_entry_t *get_open_file_entry(int fhandle);
 int inode_set_symlink(int inumber, char const *symlink);
 char *inode_get_symlink(int inumber);
 
+inode_type get_inode_type(inode_t *inode);
+size_t get_inode_size(inode_t * inode);
+void set_inode_size(inode_t * inode, size_t size);
+int get_inode_data_block(inode_t * inode);
+void set_inode_data_block(inode_t * inode, int block);
+int get_inode_hardlinks(inode_t * inode);
+void set_inode_hardlinks(inode_t * inode, int hardlinks);
+void increment_inode_hardlinks(inode_t * inode);
+void decrement_inode_hardlinks(inode_t * inode);
+int get_open_file_inumber(open_file_entry_t *open_file_entry);
+size_t get_open_file_offset(open_file_entry_t *entry);
+void set_open_file_offset(open_file_entry_t *entry, size_t offset);
+void increment_open_file_offset(open_file_entry_t *entry, size_t increment);
+
+
 #endif // STATE_H

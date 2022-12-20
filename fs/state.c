@@ -143,11 +143,6 @@ int state_init(tfs_params params) {
 
     }
 
-    // Initialize rwlocks
-
-
-
-
     return 0;
 }
 
@@ -814,4 +809,70 @@ char *inode_get_symlink(int inumber){
 
         return symlink_block;
     }
+}
+
+// Setters and getters to preserve abstraction
+inode_type get_inode_type(inode_t * inode){
+    ALWAYS_ASSERT(inode != NULL, "get_inode_type: inode must be non-NULL");
+    return inode->i_node_type;
+}
+
+size_t get_inode_size(inode_t * inode){
+    ALWAYS_ASSERT(inode != NULL, "get_inode_size: inode must be non-NULL");
+    return inode->i_size;
+}
+
+void set_inode_size(inode_t * inode, size_t size){
+    ALWAYS_ASSERT(inode != NULL, "set_inode_size: inode must be non-NULL");
+    inode->i_size = size;
+}
+
+int get_inode_data_block(inode_t * inode){
+    ALWAYS_ASSERT(inode != NULL, "get_inode_data_block: inode must be non-NULL");
+    return inode->i_data_block;
+}
+
+void set_inode_data_block(inode_t * inode, int block){
+    ALWAYS_ASSERT(inode != NULL, "set_inode_data_block: inode must be non-NULL");
+    inode->i_data_block = block;
+}
+
+int get_inode_hardlinks(inode_t * inode){
+    ALWAYS_ASSERT(inode != NULL, "get_inode_hardlinks: inode must be non-NULL");
+    return inode->i_hardlinks;
+}
+
+void set_inode_hardlinks(inode_t * inode, int hardlinks){
+    ALWAYS_ASSERT(inode != NULL, "set_inode_hardlinks: inode must be non-NULL");
+    inode->i_hardlinks = hardlinks;
+}
+
+void increment_inode_hardlinks(inode_t * inode){
+    ALWAYS_ASSERT(inode != NULL, "increment_inode_hardlinks: inode must be non-NULL");
+    inode->i_hardlinks++;
+}
+
+void decrement_inode_hardlinks(inode_t * inode){
+    ALWAYS_ASSERT(inode != NULL, "decrement_inode_hardlinks: inode must be non-NULL");
+    inode->i_hardlinks--;
+}
+
+int get_open_file_inumber(open_file_entry_t *entry) {
+    ALWAYS_ASSERT(entry != NULL, "get_open_file_inumber: entry must be non-NULL");
+    return entry->of_inumber;
+}
+
+size_t get_open_file_offset(open_file_entry_t *entry) {
+    ALWAYS_ASSERT(entry != NULL, "get_open_file_offset: entry must be non-NULL");
+    return entry->of_offset;
+}
+
+void set_open_file_offset(open_file_entry_t *entry, size_t offset) {
+    ALWAYS_ASSERT(entry != NULL, "set_open_file_offset: entry must be non-NULL");
+    entry->of_offset = offset;
+}
+
+void increment_open_file_offset(open_file_entry_t *entry, size_t increment) {
+    ALWAYS_ASSERT(entry != NULL, "increment_open_file_offset: entry must be non-NULL");
+    entry->of_offset += increment;
 }
