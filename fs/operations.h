@@ -3,7 +3,7 @@
 
 #include "config.h"
 #include <sys/types.h>
-
+#include <pthread.h>
 /**
  * TécnicoFS parameters.
  */
